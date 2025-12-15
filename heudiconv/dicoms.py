@@ -206,10 +206,27 @@ def validate_dicom(
     except AttributeError:
         lgr.info("File {} is missing any StudyInstanceUID".format(fl))
         file_studyUID = None
+    try:
+        series_signature = mw.series_signature
+    except dw.WrapperError as e:
+        lgr.warning(
+            "Skipping %s due to invalid DICOM slice geometry (StudyInstanceUID=%s, "
+            "SeriesInstanceUID=%s, SeriesNumber=%s, ProtocolName=%s, "
+            "SOPInstanceUID=%s): %s",
+            fl,
+            getattr(mw.dcm_data, "StudyInstanceUID", None),
+            getattr(mw.dcm_data, "SeriesInstanceUID", None),
+            getattr(mw.dcm_data, "SeriesNumber", None),
+            getattr(mw.dcm_data, "ProtocolName", None),
+            getattr(mw.dcm_data, "SOPInstanceUID", None),
+            e,
+        )
+        return None
+
     # clean series signature
     for sig in ("iop", "ICE_Dims", "SequenceName"):
         try:
-            del mw.series_signature[sig]
+            del series_signature[sig]
         except KeyError:
             pass
     return mw, series_id, file_studyUID
