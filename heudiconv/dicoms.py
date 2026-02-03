@@ -383,7 +383,14 @@ def group_dicoms_into_seqinfos(
         ingrp = False
         # check if same series was already converted
         for idx in range(len(mwgroup)):
-            if mw.is_same_series(mwgroup[idx]):
+            try:
+                same_series = mw.is_same_series(mwgroup[idx])
+            except dw.WrapperError as exc:
+                lgr.warning(
+                    "Skipping is_same_series for %s due to: %s", filename, str(exc)
+                )
+                same_series = False
+            if same_series:
                 if grouping != "all":
                     assert (
                         mwgroup[idx].dcm_data.get("StudyInstanceUID") == file_studyUID
