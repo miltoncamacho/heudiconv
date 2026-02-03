@@ -207,11 +207,19 @@ def validate_dicom(
         lgr.info("File {} is missing any StudyInstanceUID".format(fl))
         file_studyUID = None
     # clean series signature
-    for sig in ("iop", "ICE_Dims", "SequenceName"):
-        try:
-            del mw.series_signature[sig]
-        except KeyError:
-            pass
+    # Accessing series_signature can trigger image_shape computation, which may
+    # raise WrapperError for inconsistent slice indices/positions in some series.
+    # In that case, skip signature cleanup and let later logic handle the series.
+    try:
+        for sig in ("iop", "ICE_Dims", "SequenceName"):
+            try:
+                del mw.series_signature[sig]
+            except KeyError:
+                pass
+    except dw.WrapperError as exc:
+        lgr.warning(
+            "Skipping series_signature cleanup for %s due to: %s", fl, str(exc)
+        )
     return mw, series_id, file_studyUID
 
 
