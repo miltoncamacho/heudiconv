@@ -455,6 +455,48 @@ def update_multiecho_name(
     return filename
 
 
+def update_asl_name(
+    metadata: dict[str, Any], filename: str, asl_types: list[str]
+) -> str:
+    """
+    Update the `_acq-<label>` entity in filename to reflect the
+    ArterialSpinLabelingType from the BIDS sidecar, when a sequence
+    produces multiple files with different ASL types.
+
+    Parameters
+    ----------
+    metadata : dict
+        Scan metadata dictionary from BIDS sidecar file.
+    filename : str
+        Incoming filename
+    asl_types : list
+        List of all ArterialSpinLabelingType values from the split.
+
+    Returns
+    -------
+    filename : str
+        Updated filename with acq entity reflecting the ASL type.
+    """
+    asl_type = metadata.get("ArterialSpinLabelingType")
+    if not asl_type or not isinstance(asl_type, str):
+        return filename
+
+    asl_label = asl_type  # e.g. "PCASL", "CASL", "PASL"
+
+    # If there is already an _acq-<value> in the filename, replace its value
+    acq_match = re.search(r"_acq-([^_]+)", filename)
+    if acq_match:
+        filename = filename.replace(
+            acq_match.group(0), "_acq-%s" % asl_label
+        )
+    else:
+        # Insert _acq-<label> before the suffix (last _-delimited token)
+        filetype = "_" + filename.split("_")[-1]
+        filename = filename.replace(filetype, "_acq-%s%s" % (asl_label, filetype))
+
+    return filename
+
+
 def update_uncombined_name(
     metadata: dict[str, Any], filename: str, channel_names: list[str]
 ) -> str:
@@ -1029,6 +1071,7 @@ def save_converted_files(
         echo_times: set[float] = set()
         channel_names: set[str] = set()
         image_types: set[str] = set()
+        asl_types: set[str] = set()
         for metadata in bids_metas:
             if not metadata:
                 continue
@@ -1044,6 +1087,10 @@ def save_converted_files(
                 image_types.update(metadata["ImageType"])
             except KeyError:
                 pass
+            try:
+                asl_types.add(metadata["ArterialSpinLabelingType"])
+            except KeyError:
+                pass
 
         is_multiecho = (
             len(set(filter(bool, echo_times))) > 1
@@ -1054,8 +1101,12 @@ def save_converted_files(
         is_complex = (
             "M" in image_types and "P" in image_types
         )  # Determine if data are complex (magnitude + phase)
+        is_multi_asl = (
+            len(set(filter(bool, asl_types))) > 1
+        )  # Check for varying ASL types
         echo_times_lst = sorted(echo_times)  # also converts to list
         channel_names_lst = sorted(channel_names)  # also converts to list
+        asl_types_lst = sorted(asl_types)  # also converts to list
 
         ### Loop through the bids_files, set the output name and save files
         for fl, suffix, bids_file, bids_meta in zip(
@@ -1082,6 +1133,11 @@ def save_converted_files(
                 if is_uncombined:
                     this_prefix_basename = update_uncombined_name(
                         bids_meta, this_prefix_basename, channel_names_lst
+                    )
+
+                if is_multi_asl:
+                    this_prefix_basename = update_asl_name(
+                        bids_meta, this_prefix_basename, asl_types_lst
                     )
 
             # Fallback option:
